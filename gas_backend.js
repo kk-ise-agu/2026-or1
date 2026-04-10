@@ -11,7 +11,7 @@
  *   5. デプロイURLを index.html の GAS_URL に設定
  *
  * スプレッドシート構成（自動生成）:
- *   シート「出席記録」: タイムスタンプ, 講義回, 学籍番号, 問題, 回答, 正誤, 経過秒
+ *   シート「出席記録」: タイムスタンプ, 講義回, 学籍番号, 問題, 回答, 正誤, 経過秒, 端末ID, 重複フラグ
  *   シート「集計」: 学籍番号別・回別の出席一覧
  */
 
@@ -19,7 +19,7 @@
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
-    const { lecture, studentId, question, answer, correct, elapsedSec } = data;
+    const { lecture, studentId, question, answer, correct, elapsedSec, deviceId } = data;
 
     if (!lecture || !studentId || answer === undefined) {
       return jsonResponse({ success: false, error: "必須項目が不足しています" });
@@ -33,14 +33,15 @@ function doPost(e) {
       sheet = ss.insertSheet("出席記録");
       sheet.appendRow([
         "タイムスタンプ", "講義回", "学籍番号",
-        "問題", "回答", "正誤", "経過秒"
+        "問題", "回答", "正誤", "経過秒", "端末ID", "重複疑い"
       ]);
-      sheet.getRange(1, 1, 1, 7).setFontWeight("bold");
+      sheet.getRange(1, 1, 1, 9).setFontWeight("bold");
       sheet.setFrozenRows(1);
     }
 
     const timestamp = new Date();
     const isCorrect = correct ? "○" : "×";
+    const devId = deviceId || "";
 
     // 重複チェック（同一講義回・同一学籍番号）
     const existingData = sheet.getDataRange().getValues();
@@ -56,6 +57,20 @@ function doPost(e) {
       }
     }
 
+    // 同一端末ID（異なる学籍番号）の重複チェック
+    let deviceDuplicate = "";
+    if (devId) {
+      for (let i = 1; i < existingData.length; i++) {
+        if (String(existingData[i][1]) === String(lecture) &&
+            String(existingData[i][7]) === devId &&
+            String(existingData[i][2]) !== String(studentId)) {
+          // 同じ端末から別の学籍番号で回答 → 不正の疑い
+          deviceDuplicate = "同一端末: " + String(existingData[i][2]);
+          break;
+        }
+      }
+    }
+
     // 記録追加
     sheet.appendRow([
       timestamp,
@@ -64,7 +79,9 @@ function doPost(e) {
       question,
       String(answer),
       isCorrect,
-      elapsedSec
+      elapsedSec,
+      devId,
+      deviceDuplicate
     ]);
 
     // 集計シートを更新
@@ -118,7 +135,9 @@ function doGet(e) {
         question: row[3],
         answer: row[4],
         correct: row[5],
-        elapsedSec: row[6]
+        elapsedSec: row[6],
+        deviceId: row[7] || "",
+        deviceDuplicate: row[8] || ""
       }));
 
       return jsonResponse({ success: true, data: result });

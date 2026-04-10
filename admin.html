@@ -334,6 +334,18 @@
         </select>
       </div>
 
+      <div class="setting-group">
+        <label>ワンタイムコード</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="oneTimeCode" readonly
+                 style="font-size:28px;font-weight:800;text-align:center;letter-spacing:8px;color:var(--navy);flex:1;">
+          <button class="btn outline" onclick="regenerateCode()" style="width:auto;padding:10px 16px;" title="コードを再生成">
+            &#x1F504;
+          </button>
+        </div>
+        <div class="help-text">QRコード生成時に自動生成されます。再生成ボタンで変更可能です。</div>
+      </div>
+
       <button class="btn gold" onclick="generateQR()">QRコードを生成</button>
 
       <div class="qr-area" id="qrArea" style="display:none;">
@@ -418,6 +430,21 @@ let currentQRInstance = null;
 let currentQRFullInstance = null;
 let refreshInterval = null;
 let currentLecture = null;
+let currentCode = null;
+
+// ── ワンタイムコード生成 ──
+function generateCode() {
+  return String(Math.floor(1000 + Math.random() * 9000)); // 4桁（1000-9999）
+}
+
+function regenerateCode() {
+  currentCode = generateCode();
+  document.getElementById('oneTimeCode').value = currentCode;
+  // QRが既に表示中なら再生成
+  if (currentLecture) {
+    generateQR();
+  }
+}
 
 // ── 初期化 ──
 document.addEventListener('DOMContentLoaded', () => {
@@ -453,13 +480,19 @@ function generateQR() {
   // URLを保存
   localStorage.setItem('or1_base_url', baseUrl);
 
-  // URL組み立て
-  const separator = baseUrl.includes('?') ? '&' : '?';
-  const targetUrl = baseUrl.endsWith('/')
-    ? `${baseUrl}index.html${separator}lecture=${lecture}`
+  // ワンタイムコード（未生成なら生成）
+  if (!currentCode) {
+    currentCode = generateCode();
+    document.getElementById('oneTimeCode').value = currentCode;
+  }
+
+  // URL組み立て（codeパラメータ付き）
+  const base = baseUrl.endsWith('/')
+    ? `${baseUrl}index.html`
     : baseUrl.endsWith('.html')
-      ? `${baseUrl}${separator}lecture=${lecture}`
-      : `${baseUrl}/index.html${separator}lecture=${lecture}`;
+      ? baseUrl
+      : `${baseUrl}/index.html`;
+  const targetUrl = `${base}?lecture=${lecture}&code=${currentCode}`;
 
   currentLecture = lecture;
 
@@ -602,7 +635,7 @@ function renderAttendanceTable(data) {
   // テーブル生成
   let html = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>#</th><th>学籍番号</th><th>回答</th><th>正誤</th><th>経過秒</th><th>時刻</th>
+      <th>#</th><th>学籍番号</th><th>回答</th><th>正誤</th><th>経過秒</th><th>時刻</th><th>備考</th>
     </tr></thead><tbody>`;
 
   data.forEach((row, i) => {
@@ -610,13 +643,17 @@ function renderAttendanceTable(data) {
     const mark = row.correct === '○'
       ? '<span class="correct-mark">○</span>'
       : '<span class="wrong-mark">×</span>';
-    html += `<tr>
+    const warn = row.deviceDuplicate
+      ? `<span style="color:var(--danger);font-size:12px;font-weight:700;">⚠ ${escapeHtml(row.deviceDuplicate)}</span>`
+      : '';
+    html += `<tr${row.deviceDuplicate ? ' style="background:#FFF3F3;"' : ''}>
       <td>${i + 1}</td>
       <td>${escapeHtml(String(row.studentId))}</td>
       <td>${escapeHtml(String(row.answer))}</td>
       <td>${mark}</td>
       <td>${row.elapsedSec ?? '-'}s</td>
       <td>${time}</td>
+      <td>${warn}</td>
     </tr>`;
   });
 

@@ -231,6 +231,20 @@
     <div class="result-msg" style="color:var(--danger)">時間切れです</div>
     <div class="result-detail">制限時間内に回答できませんでした。<br>教員に申し出てください。</div>
   </div>
+
+  <!-- コード不正 -->
+  <div class="step" id="stepInvalidCode">
+    <div class="result-icon">&#x1F6AB;</div>
+    <div class="result-msg" style="color:var(--danger)">アクセスコードが無効です</div>
+    <div class="result-detail">このURLでは出席確認ができません。<br>教室で提示されたQRコードを<br>読み取ってアクセスしてください。</div>
+  </div>
+
+  <!-- 同一端末からの重複回答 -->
+  <div class="step" id="stepAlreadyAnswered">
+    <div class="result-icon">&#x1F6D1;</div>
+    <div class="result-msg" style="color:var(--gold)">この端末では回答済みです</div>
+    <div class="result-detail">この端末から既に出席回答が送信されています。<br>1台の端末で回答できるのは1回のみです。</div>
+  </div>
 </div>
 
 <script>
@@ -360,6 +374,8 @@ const QUESTION_BANK = {
 // ====================================================================
 let state = {
   lecture: null,
+  code: null,       // ワンタイムコード（URLパラメータから取得）
+  deviceId: null,   // 端末識別子
   studentId: null,
   question: null,
   correctAnswer: null,
@@ -369,16 +385,73 @@ let state = {
 };
 
 // ====================================================================
+// 端末フィンガープリント（簡易）
+// ====================================================================
+function generateDeviceId() {
+  const raw = [
+    navigator.userAgent,
+    navigator.language,
+    screen.width + "x" + screen.height,
+    screen.colorDepth,
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+    navigator.hardwareConcurrency || "",
+    navigator.maxTouchPoints || ""
+  ].join("|");
+  // ハッシュ化して短い文字列に
+  let h = 0;
+  for (let i = 0; i < raw.length; i++) {
+    h = ((h << 5) - h + raw.charCodeAt(i)) | 0;
+  }
+  return "d" + Math.abs(h).toString(36);
+}
+
+// ====================================================================
+// 同一端末の重複回答チェック
+// ====================================================================
+function hasAlreadyAnswered() {
+  try {
+    const key = `or1_answered_${state.lecture}_${state.code}`;
+    return sessionStorage.getItem(key) !== null;
+  } catch (e) { return false; }
+}
+
+function markAsAnswered(studentId) {
+  try {
+    const key = `or1_answered_${state.lecture}_${state.code}`;
+    sessionStorage.setItem(key, studentId);
+  } catch (e) { /* sessionStorage使えない環境は無視 */ }
+}
+
+// ====================================================================
 // 初期化
 // ====================================================================
 window.addEventListener("DOMContentLoaded", () => {
   const params = new URLSearchParams(window.location.search);
   const lec = params.get("lecture") || params.get("lec") || params.get("l");
+  const code = params.get("code");
+
   if (lec) {
     state.lecture = parseInt(lec, 10);
     document.getElementById("lectureBadge").textContent = `第 ${state.lecture} 回`;
   } else {
     document.getElementById("lectureBadge").textContent = "講義回未指定";
+  }
+
+  // ワンタイムコード検証
+  if (!code || !/^\d{4}$/.test(code)) {
+    // コードがない、または不正 → アクセス拒否
+    showStep("stepInvalidCode");
+    document.getElementById("btnStart").disabled = true;
+    return;
+  }
+  state.code = code;
+  state.deviceId = generateDeviceId();
+
+  // 同一端末での重複回答チェック
+  if (hasAlreadyAnswered()) {
+    showStep("stepAlreadyAnswered");
+    document.getElementById("btnStart").disabled = true;
+    return;
   }
 
   // Enter キーで次へ
@@ -445,6 +518,7 @@ function startTimer() {
     if (state.timeLeft <= 0) {
       clearInterval(state.timerId);
       showStep("stepExpired");
+      markAsAnswered(state.studentId || "timeout");
       // 時間切れでも記録を送信（不正解として）
       sendToGAS(false, CONFIG.TIME_LIMIT);
     }
@@ -494,6 +568,9 @@ function submitAnswer() {
 
   showStep("step3");
 
+  // 回答済みとしてマーク（同一端末からの再回答をブロック）
+  markAsAnswered(state.studentId);
+
   // Google Sheets に送信
   sendToGAS(correct, parseFloat(elapsed));
 }
@@ -538,7 +615,9 @@ function sendToGAS(correct, elapsedSec) {
     question: state.question,
     answer: document.getElementById("answerInput").value.trim(),
     correct,
-    elapsedSec
+    elapsedSec,
+    code: state.code,
+    deviceId: state.deviceId
   };
 
   fetch(CONFIG.GAS_URL, {
