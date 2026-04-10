@@ -11,15 +11,16 @@
  *   5. デプロイURLを index.html の GAS_URL に設定
  *
  * スプレッドシート構成（自動生成）:
- *   シート「出席記録」: タイムスタンプ, 講義回, 学籍番号, 問題, 回答, 正誤, 経過秒, 端末ID, 重複フラグ
- *   シート「集計」: 学籍番号別・回別の出席一覧
+ *   シート「出席記録」: タイムスタンプ, 講義回, ラウンド, 学籍番号, 問題, 回答, 正誤, 経過秒, 端末ID, 重複フラグ
+ *   シート「集計」: 学籍番号別・回別・ラウンド別の出席一覧
  */
 
 // ── POST受信（出席回答を記録） ──
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
-    const { lecture, studentId, question, answer, correct, elapsedSec, deviceId } = data;
+    const { lecture, round, studentId, question, answer, correct, elapsedSec, deviceId } = data;
+    const roundNum = round || 1;
 
     if (!lecture || !studentId || answer === undefined) {
       return jsonResponse({ success: false, error: "必須項目が不足しています" });
@@ -32,10 +33,10 @@ function doPost(e) {
     if (!sheet) {
       sheet = ss.insertSheet("出席記録");
       sheet.appendRow([
-        "タイムスタンプ", "講義回", "学籍番号",
+        "タイムスタンプ", "講義回", "ラウンド", "学籍番号",
         "問題", "回答", "正誤", "経過秒", "端末ID", "重複疑い"
       ]);
-      sheet.getRange(1, 1, 1, 9).setFontWeight("bold");
+      sheet.getRange(1, 1, 1, 10).setFontWeight("bold");
       sheet.setFrozenRows(1);
     }
 
@@ -43,11 +44,12 @@ function doPost(e) {
     const isCorrect = correct ? "○" : "×";
     const devId = deviceId || "";
 
-    // 重複チェック（同一講義回・同一学籍番号）
+    // 重複チェック（同一講義回・同一ラウンド・同一学籍番号）
     const existingData = sheet.getDataRange().getValues();
     for (let i = 1; i < existingData.length; i++) {
       if (String(existingData[i][1]) === String(lecture) &&
-          String(existingData[i][2]) === String(studentId)) {
+          String(existingData[i][2]) === String(roundNum) &&
+          String(existingData[i][3]) === String(studentId)) {
         // 既に回答済み → 上書きせず警告
         return jsonResponse({
           success: true,
@@ -62,10 +64,11 @@ function doPost(e) {
     if (devId) {
       for (let i = 1; i < existingData.length; i++) {
         if (String(existingData[i][1]) === String(lecture) &&
-            String(existingData[i][7]) === devId &&
-            String(existingData[i][2]) !== String(studentId)) {
+            String(existingData[i][2]) === String(roundNum) &&
+            String(existingData[i][8]) === devId &&
+            String(existingData[i][3]) !== String(studentId)) {
           // 同じ端末から別の学籍番号で回答 → 不正の疑い
-          deviceDuplicate = "同一端末: " + String(existingData[i][2]);
+          deviceDuplicate = "同一端末: " + String(existingData[i][3]);
           break;
         }
       }
@@ -75,6 +78,7 @@ function doPost(e) {
     sheet.appendRow([
       timestamp,
       lecture,
+      roundNum,
       studentId,
       question,
       String(answer),
@@ -114,6 +118,7 @@ function doGet(e) {
 
     if (action === "data") {
       const lecture = e.parameter.lecture;
+      const round = e.parameter.round;
       const sheet = ss.getSheetByName("出席記録");
       if (!sheet) {
         return jsonResponse({ success: true, data: [] });
@@ -125,19 +130,23 @@ function doGet(e) {
 
       let filtered = rows;
       if (lecture) {
-        filtered = rows.filter(r => String(r[1]) === String(lecture));
+        filtered = filtered.filter(r => String(r[1]) === String(lecture));
+      }
+      if (round) {
+        filtered = filtered.filter(r => String(r[2]) === String(round));
       }
 
       const result = filtered.map(row => ({
         timestamp: row[0],
         lecture: row[1],
-        studentId: row[2],
-        question: row[3],
-        answer: row[4],
-        correct: row[5],
-        elapsedSec: row[6],
-        deviceId: row[7] || "",
-        deviceDuplicate: row[8] || ""
+        round: row[2],
+        studentId: row[3],
+        question: row[4],
+        answer: row[5],
+        correct: row[6],
+        elapsedSec: row[7],
+        deviceId: row[8] || "",
+        deviceDuplicate: row[9] || ""
       }));
 
       return jsonResponse({ success: true, data: result });
@@ -156,7 +165,7 @@ function doGet(e) {
         const lec = String(row[1]);
         if (!summary[lec]) summary[lec] = { total: 0, correct: 0 };
         summary[lec].total++;
-        if (row[5] === "○") summary[lec].correct++;
+        if (row[6] === "○") summary[lec].correct++;
       });
 
       return jsonResponse({ success: true, summary });
@@ -187,23 +196,29 @@ function updateSummary(ss) {
   );
 
   // 学籍番号の一覧
-  const students = [...new Set(data.map(r => String(r[2])))].sort();
+  const students = [...new Set(data.map(r => String(r[3])))].sort();
 
-  // ヘッダー行
-  const header = ["学籍番号", ...lectures.map(l => `第${l}回`)];
+  // ラウンドも考慮したヘッダー行
+  const rounds = [1, 2];
+  const header = ["学籍番号"];
+  lectures.forEach(l => {
+    rounds.forEach(r => header.push(`第${l}回R${r}`));
+  });
 
   // データ行
   const rows = students.map(sid => {
     const row = [sid];
     lectures.forEach(lec => {
-      const record = data.find(
-        r => String(r[2]) === sid && String(r[1]) === lec
-      );
-      if (record) {
-        row.push(record[5] === "○" ? "○" : "△"); // 正解○, 不正解△
-      } else {
-        row.push(""); // 未出席
-      }
+      rounds.forEach(r => {
+        const record = data.find(
+          d => String(d[3]) === sid && String(d[1]) === lec && String(d[2]) === String(r)
+        );
+        if (record) {
+          row.push(record[6] === "○" ? "○" : "△"); // 正解○, 不正解△
+        } else {
+          row.push(""); // 未出席
+        }
+      });
     });
     return row;
   });

@@ -316,21 +316,29 @@
         <label for="lectureNum">講義回</label>
         <select id="lectureNum">
           <option value="">-- 選択 --</option>
-          <option value="1">第1回 — 線形計画法の概要</option>
-          <option value="2">第2回 — LPの定式化</option>
-          <option value="3">第3回 — シンプレックス法</option>
-          <option value="4">第4回 — 双対理論</option>
-          <option value="5">第5回 — 感度分析</option>
-          <option value="6">第6回 — 輸送問題</option>
-          <option value="7">第7回 — 整数計画法</option>
-          <option value="8">第8回 — 中間まとめ</option>
-          <option value="9">第9回 — ネットワーク最適化</option>
-          <option value="10">第10回 — 最短路・最大流</option>
-          <option value="11">第11回 — 動的計画法</option>
-          <option value="12">第12回 — 非線形計画法</option>
-          <option value="13">第13回 — 在庫管理モデル</option>
-          <option value="14">第14回 — 待ち行列理論</option>
-          <option value="15">第15回 — 総まとめ</option>
+          <option value="1">第1回 — ORとは・最適化の基本</option>
+          <option value="2">第2回 — 最適化問題の分類と定式化</option>
+          <option value="3">第3回 — LPへの非線形問題の変形</option>
+          <option value="4">第4回 — 線形計画法の基礎と図解法</option>
+          <option value="5">第5回 — 単体法の基礎</option>
+          <option value="6">第6回 — 単体法の詳細</option>
+          <option value="7">第7回 — 退化と巡回の問題</option>
+          <option value="8">第8回 — 単体法の終了性と初期基底解</option>
+          <option value="9">第9回 — 前半復習</option>
+          <option value="10">第10回 — 双対計画法の導入</option>
+          <option value="11">第11回 — 双対性の応用</option>
+          <option value="12">第12回 — 後最適化分析</option>
+          <option value="13">第13回 — 組合せ最適化の基礎</option>
+          <option value="14">第14回 — 組合せ最適化の応用と解法</option>
+          <option value="15">第15回 — 最終復習</option>
+        </select>
+      </div>
+
+      <div class="setting-group">
+        <label for="roundNum">ラウンド</label>
+        <select id="roundNum">
+          <option value="1">1回目（板書2-3完了後、約15-20分）</option>
+          <option value="2">2回目（板書5-6完了後、約35-40分）</option>
         </select>
       </div>
 
@@ -430,6 +438,7 @@ let currentQRInstance = null;
 let currentQRFullInstance = null;
 let refreshInterval = null;
 let currentLecture = null;
+let currentRound = null;
 let currentCode = null;
 
 // ── ワンタイムコード生成 ──
@@ -445,6 +454,19 @@ function regenerateCode() {
     generateQR();
   }
 }
+
+// ラウンド切り替え時にコードを自動再生成
+document.addEventListener('DOMContentLoaded', () => {
+  const roundSel = document.getElementById('roundNum');
+  if (roundSel) {
+    roundSel.addEventListener('change', () => {
+      // ラウンド変更時はコードを再生成して不正防止
+      currentCode = generateCode();
+      document.getElementById('oneTimeCode').value = currentCode;
+      if (currentLecture) generateQR();
+    });
+  }
+});
 
 // ── 初期化 ──
 document.addEventListener('DOMContentLoaded', () => {
@@ -467,6 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function generateQR() {
   const baseUrl = document.getElementById('baseUrl').value.trim();
   const lecture = document.getElementById('lectureNum').value;
+  const round = document.getElementById('roundNum').value;
 
   if (!baseUrl) {
     alert('出席ページURLを入力してください');
@@ -486,15 +509,16 @@ function generateQR() {
     document.getElementById('oneTimeCode').value = currentCode;
   }
 
-  // URL組み立て（codeパラメータ付き）
+  // URL組み立て（round + codeパラメータ付き）
   const base = baseUrl.endsWith('/')
     ? `${baseUrl}index.html`
     : baseUrl.endsWith('.html')
       ? baseUrl
       : `${baseUrl}/index.html`;
-  const targetUrl = `${base}?lecture=${lecture}&code=${currentCode}`;
+  const targetUrl = `${base}?lecture=${lecture}&round=${round}&code=${currentCode}`;
 
   currentLecture = lecture;
+  currentRound = round;
 
   // QRコード表示エリア
   const qrArea = document.getElementById('qrArea');
@@ -503,7 +527,8 @@ function generateQR() {
   // ラベル
   const select = document.getElementById('lectureNum');
   const label = select.options[select.selectedIndex].text;
-  document.getElementById('qrLabel').textContent = label;
+  const roundLabel = round === '2' ? '（2回目）' : '（1回目）';
+  document.getElementById('qrLabel').textContent = label + ' ' + roundLabel;
   document.getElementById('qrUrlText').textContent = targetUrl;
 
   // QRコード生成（既存を消去）
@@ -530,7 +555,8 @@ function showFullscreen() {
 
   const select = document.getElementById('lectureNum');
   const label = select.options[select.selectedIndex].text;
-  document.getElementById('qrLabelFull').textContent = label;
+  const roundLabel = currentRound === '2' ? '（2回目）' : '（1回目）';
+  document.getElementById('qrLabelFull').textContent = label + ' ' + roundLabel;
 
   const qrFullEl = document.getElementById('qrcode-full');
   qrFullEl.innerHTML = '';
@@ -599,7 +625,8 @@ async function fetchAttendanceData() {
   if (!url || !currentLecture) return;
 
   try {
-    const res = await fetch(`${url}?action=data&lecture=${currentLecture}`);
+    const roundParam = currentRound ? `&round=${currentRound}` : '';
+    const res = await fetch(`${url}?action=data&lecture=${currentLecture}${roundParam}`);
     const result = await res.json();
 
     if (result.success) {
@@ -635,7 +662,7 @@ function renderAttendanceTable(data) {
   // テーブル生成
   let html = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>#</th><th>学籍番号</th><th>回答</th><th>正誤</th><th>経過秒</th><th>時刻</th><th>備考</th>
+      <th>#</th><th>学籍番号</th><th>R</th><th>回答</th><th>正誤</th><th>経過秒</th><th>時刻</th><th>備考</th>
     </tr></thead><tbody>`;
 
   data.forEach((row, i) => {
@@ -646,9 +673,11 @@ function renderAttendanceTable(data) {
     const warn = row.deviceDuplicate
       ? `<span style="color:var(--danger);font-size:12px;font-weight:700;">⚠ ${escapeHtml(row.deviceDuplicate)}</span>`
       : '';
+    const roundDisp = row.round ? String(row.round) : '-';
     html += `<tr${row.deviceDuplicate ? ' style="background:#FFF3F3;"' : ''}>
       <td>${i + 1}</td>
       <td>${escapeHtml(String(row.studentId))}</td>
+      <td>${roundDisp}</td>
       <td>${escapeHtml(String(row.answer))}</td>
       <td>${mark}</td>
       <td>${row.elapsedSec ?? '-'}s</td>
