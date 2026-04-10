@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OR-I 出席確認</title>
+<style>
+  :root {
+    --navy: #1A2744;
+    --accent: #4A90D9;
+    --gold: #E8B84B;
+    --light: #F5F7FA;
+    --danger: #E74C3C;
+    --success: #27AE60;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+    background: var(--light);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    padding: 32px;
+    width: 100%;
+    max-width: 440px;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .header h1 {
+    font-size: 20px;
+    color: var(--navy);
+    margin-bottom: 4px;
+  }
+
+  .header .lecture-badge {
+    display: inline-block;
+    background: var(--gold);
+    color: var(--navy);
+    font-weight: 700;
+    font-size: 14px;
+    padding: 4px 16px;
+    border-radius: 20px;
+  }
+
+  .step { display: none; }
+  .step.active { display: block; }
+
+  label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 6px;
+  }
+
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 12px;
+    font-size: 18px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input:focus { border-color: var(--accent); }
+
+  .btn {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 16px;
+    transition: background 0.2s;
+  }
+
+  .btn:hover { background: #3A7BC8; }
+  .btn:disabled { background: #ccc; cursor: not-allowed; }
+  .btn.danger { background: var(--danger); }
+  .btn.success { background: var(--success); }
+
+  .timer-bar {
+    width: 100%;
+    height: 6px;
+    background: #e0e0e0;
+    border-radius: 3px;
+    margin: 12px 0;
+    overflow: hidden;
+  }
+
+  .timer-bar .fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.5s linear, background 0.3s;
+  }
+
+  .timer-bar .fill.warn { background: var(--gold); }
+  .timer-bar .fill.critical { background: var(--danger); }
+
+  .timer-text {
+    text-align: center;
+    font-size: 14px;
+    color: #888;
+  }
+
+  .question-box {
+    background: var(--light);
+    border-left: 4px solid var(--accent);
+    padding: 16px;
+    border-radius: 0 8px 8px 0;
+    margin: 16px 0;
+  }
+
+  .question-box .q-label {
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .question-box .q-text {
+    font-size: 16px;
+    color: var(--navy);
+    line-height: 1.6;
+  }
+
+  .result-icon {
+    text-align: center;
+    font-size: 64px;
+    margin: 16px 0;
+  }
+
+  .result-msg {
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .result-detail {
+    text-align: center;
+    font-size: 14px;
+    color: #888;
+    line-height: 1.6;
+  }
+
+  .error-msg {
+    background: #FFF3F3;
+    color: var(--danger);
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-top: 8px;
+    display: none;
+  }
+
+  .student-id-display {
+    font-size: 13px;
+    color: #888;
+    text-align: right;
+    margin-bottom: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="header">
+    <h1>オペレーションズ・リサーチ I</h1>
+    <span class="lecture-badge" id="lectureBadge">第 ? 回</span>
+  </div>
+
+  <!-- Step 1: 学籍番号入力 -->
+  <div class="step active" id="step1">
+    <label for="studentId">学籍番号を入力してください</label>
+    <input type="text" id="studentId" placeholder="例: 24T0001"
+           pattern="[0-9A-Za-z]+" maxlength="20" autocomplete="off">
+    <div class="error-msg" id="idError"></div>
+    <button class="btn" id="btnStart" onclick="startQuestion()">出席確認を開始</button>
+  </div>
+
+  <!-- Step 2: 問題回答 -->
+  <div class="step" id="step2">
+    <div class="student-id-display" id="sidDisplay"></div>
+
+    <div class="question-box">
+      <div class="q-label">出席確認問題</div>
+      <div class="q-text" id="questionText"></div>
+    </div>
+
+    <label for="answerInput">回答を入力</label>
+    <input type="text" id="answerInput" autocomplete="off" inputmode="text">
+
+    <div class="timer-bar"><div class="fill" id="timerFill"></div></div>
+    <div class="timer-text" id="timerText">残り 60 秒</div>
+
+    <div class="error-msg" id="ansError"></div>
+    <button class="btn" id="btnSubmit" onclick="submitAnswer()">回答を提出</button>
+  </div>
+
+  <!-- Step 3: 結果表示 -->
+  <div class="step" id="step3">
+    <div class="result-icon" id="resultIcon"></div>
+    <div class="result-msg" id="resultMsg"></div>
+    <div class="result-detail" id="resultDetail"></div>
+  </div>
+
+  <!-- 期限切れ -->
+  <div class="step" id="stepExpired">
+    <div class="result-icon">&#x23F0;</div>
+    <div class="result-msg" style="color:var(--danger)">時間切れです</div>
+    <div class="result-detail">制限時間内に回答できませんでした。<br>教員に申し出てください。</div>
+  </div>
+</div>
+
+<script>
+// ====================================================================
+// 設定
+// ====================================================================
+const CONFIG = {
+  // Google Apps Script のデプロイURL（設定必須）
+  GAS_URL: "https://script.google.com/macros/s/AKfycbywR0YopqkQpQfg4uNPdicSrz_oKFwQLuq47cfnUOhnZKBxD19ByFxvuQfrU5vtjxGGfg/exec",
+  // 制限時間（秒）
+  TIME_LIMIT: 60,
+};
+
+// ====================================================================
+// 講義連動型 問題バンク（全15回）
+// ====================================================================
+const QUESTION_BANK = {
+  1: [
+    { q: "数理最適化問題の「目的関数」を英語で何と言いますか？（アルファベットで）", a: "objective function" },
+    { q: "「実行可能解」の集合のことを何と呼びますか？（漢字4文字）", a: "実行可能集合" },
+    { q: "最適化問題で最小化問題を最大化問題に変換するとき、目的関数にどんな操作をしますか？（漢字3文字以内）", a: "符号反転" },
+    { q: "OR の正式名称をカタカナで書いてください", a: "オペレーションズリサーチ" },
+    { q: "この講義の教科書のタイトルは？（漢字4文字）", a: "数理最適化" },
+  ],
+  2: [
+    { q: "目的関数と制約条件がすべて線形の問題を何と呼びますか？（アルファベット2文字）", a: "LP" },
+    { q: "変数がすべて整数値に限定される計画問題の略称は？（アルファベット2文字）", a: "IP" },
+    { q: "一部が整数変数・残りが連続変数の計画問題の略称は？（アルファベット3文字）", a: "MIP" },
+    { q: "整数計画問題から整数条件を外してLPとして解くことを何と言いますか？（漢字2文字）", a: "緩和" },
+    { q: "変数が0か1だけをとる計画問題を「○○計画」と言います。○に入る数字は？", a: "01" },
+  ],
+  3: [
+    { q: "2次計画問題の略称は？（アルファベット2文字）", a: "QP" },
+    { q: "実行可能集合が凸集合で目的関数が凸関数であるとき、局所最適解は必ず何と一致しますか？（漢字4文字）", a: "大域最適解" },
+    { q: "NLPは何の略ですか？（英単語3語の頭文字をとったもの、Nから始まる）", a: "Nonlinear Programming" },
+    { q: "目的関数が2次式で制約が線形の問題を何問題と呼びますか？（漢字2文字+2文字）", a: "2次計画" },
+    { q: "多目的計画問題で、他の解に支配されない解を何と呼びますか？（カタカナ4文字）", a: "パレート" },
+  ],
+  4: [
+    { q: "線形計画問題の実行可能領域はどんな形をしていますか？（カタカナ2文字+漢字2文字）", a: "凸多面体" },
+    { q: "LPの最適解は実行可能領域のどこに存在しますか？（漢字2文字）", a: "頂点" },
+    { q: "LPの標準形では、不等式制約にどんな変数を追加しますか？（カタカナ+漢字で5文字）", a: "スラック変数" },
+    { q: "制約条件をすべて等式に変換したLPの形を何と呼びますか？（漢字3文字）", a: "標準形" },
+    { q: "LP の実行可能集合が空集合のとき、何と言いますか？（漢字+カタカナ5文字以内）", a: "実行不可能" },
+  ],
+  5: [
+    { q: "シンプレックス法を開発した数学者の名前は？（カタカナ4文字）", a: "ダンツィグ" },
+    { q: "辞書形式で、右辺の変数を何と呼びますか？（漢字+カタカナ5文字）", a: "非基底変数" },
+    { q: "シンプレックス法で、増加させる変数を含む列を何と呼びますか？（カタカナ+漢字で5文字）", a: "ピボット列" },
+    { q: "最初に0になる基底変数を決める操作で使う比の計算を何テストと呼びますか？（漢字+カタカナ6文字以内）", a: "最小比テスト" },
+    { q: "すべての c_j が0以下のとき、シンプレックス法はどうなりますか？（漢字4文字以内）", a: "最適" },
+  ],
+  6: [
+    { q: "シンプレックス法の1反復で、辞書の中で行と列を選んで行う操作を何と呼びますか？（カタカナ3文字）", a: "ピボット" },
+    { q: "すべての基底変数が正の辞書を何と呼びますか？（漢字+カタカナ6文字）", a: "非退化辞書" },
+    { q: "退化した辞書でシンプレックス法が同じ辞書に戻ることを何と呼びますか？（漢字2文字）", a: "巡回" },
+    { q: "巡回を防ぐためのルールの名前は？（カタカナ4文字+法）", a: "ブランド法" },
+    { q: "シンプレックス法の計算量は、最悪の場合どのオーダーですか？（漢字2文字）", a: "指数" },
+  ],
+  7: [
+    { q: "初期実行可能辞書が得られないとき使う手法を何と呼びますか？（漢字3文字+法）", a: "2段階法" },
+    { q: "2段階法の第1段階で導入する変数を何と呼びますか？（漢字3文字）", a: "補助変数" },
+    { q: "2段階法の第1段階の最適値が0でなければ、元の問題はどうなりますか？（漢字+5文字以内）", a: "実行不可能" },
+    { q: "大きなMを使ったペナルティ法を何法と呼びますか？（アルファベット2文字+法）", a: "ビッグM法" },
+    { q: "LPが最適解を持たず目的関数値がいくらでも大きくなることを何と言いますか？（漢字3文字）", a: "非有界" },
+  ],
+  8: [
+    { q: "シンプレックス法の反復回数の上限はC(m+n, m)です。これを何と呼びますか？（漢字3文字+数）", a: "組合せ数" },
+    { q: "シンプレックス法は実行可能領域の何を移動していくアルゴリズムですか？（漢字2文字）", a: "頂点" },
+    { q: "実行可能辞書から出発して、目的関数値を改善し続けるのがシンプレックス法の基本方針ですが、辞書のどの値を見て改善可能か判断しますか？", a: "目的関数の係数" },
+    { q: "退化が起こるのは、基底変数の値がいくつのときですか？（数字1文字）", a: "0" },
+    { q: "シンプレックス法で最適性を判定する条件：目的関数の非基底変数の係数がすべて何以下？", a: "0" },
+  ],
+  9: [
+    { q: "今日の授業は何ですか？（漢字2文字）", a: "演習" },
+    { q: "シンプレックス法で使うテーブル形式の表現を何と呼びますか？（漢字2文字）", a: "辞書" },
+    { q: "LPの最適解が存在するための必要条件：実行可能集合が何でないこと？（漢字2文字）", a: "空集合" },
+    { q: "LP で目的関数値に上限がない場合を何と言いますか？（漢字3文字）", a: "非有界" },
+    { q: "線形計画のLはLinearですが、PはProgrammingの略です。このProgrammingの意味は？（漢字2文字）", a: "計画" },
+  ],
+  10: [
+    { q: "LPの主問題に対して作られるもう一つの問題を何と呼びますか？（漢字3文字）", a: "双対問題" },
+    { q: "主問題が最小化のとき、双対問題は何ですか？（漢字3文字）", a: "最大化" },
+    { q: "主問題の制約数は双対問題の何の数に対応しますか？（漢字2文字）", a: "変数" },
+    { q: "弱双対定理：主問題の実行可能解の目的関数値は、双対問題の実行可能解の目的関数値より常にどうですか？（漢字3文字以内）", a: "以上" },
+    { q: "主問題と双対問題の最適値が等しいことを示す定理を何と呼びますか？（漢字+カタカナ6文字以内）", a: "強双対定理" },
+  ],
+  11: [
+    { q: "相補性条件とは何ですか？主変数×双対制約の何が0？（カタカナ4文字）", a: "スラック" },
+    { q: "主問題の制約が等式のとき、対応する双対変数にはどんな条件がつきますか？（漢字+3文字以内）", a: "符号自由" },
+    { q: "双対シンプレックス法では、何が常に満たされた状態を保ちますか？（漢字+カタカナ5文字）", a: "双対実行可能" },
+    { q: "感度分析で、制約の右辺を1単位変化させたときの目的関数の変化量は何で与えられますか？（漢字+3文字）", a: "双対変数" },
+    { q: "双対変数のことを経済学では何と呼びますか？（カタカナ+漢字で5文字）", a: "シャドウ価格" },
+  ],
+  12: [
+    { q: "シンプレックス法で最適解を得た後、問題の一部が変わったとき最初からやり直さずに解を修正する手法を何と言いますか？（漢字4文字）", a: "再最適化" },
+    { q: "目的関数の係数を変化させたとき、現在の基底が最適のまま保たれる範囲を何と言いますか？（漢字+カタカナ5文字以内）", a: "許容範囲" },
+    { q: "新しい制約を追加したとき、現在の解がそれを満たさない場合に使う方法は？（漢字+カタカナ9文字）", a: "双対シンプレックス法" },
+    { q: "列生成法では何を動的に追加していきますか？（漢字2文字）", a: "変数" },
+    { q: "パラメトリック計画法では、パラメータをどのように変化させますか？（漢字2文字）", a: "連続" },
+  ],
+  13: [
+    { q: "巡回セールスマン問題の英語略称は？（アルファベット3文字）", a: "TSP" },
+    { q: "整数計画問題を解く代表的な手法は？（漢字+カタカナで7文字）", a: "分枝限定法" },
+    { q: "分枝限定法で、LP緩和の最適値が暫定解より悪い場合に探索を打ち切ることを何と言いますか？（漢字2文字）", a: "剪定" },
+    { q: "組合せ最適化問題で、解の良さの保証つき近似解を求める方法を何と言いますか？（漢字+カタカナ6文字）", a: "近似アルゴリズム" },
+    { q: "ナップサック問題で、品物の価値÷重さの比を何と呼びますか？（漢字4文字以内）", a: "効率" },
+  ],
+  14: [
+    { q: "カッティングプレーン法で追加する制約を何と呼びますか？（漢字2文字）", a: "切断" },
+    { q: "分枝限定法で、LPを解いて得た解が整数でないとき行う操作を何と言いますか？（漢字2文字）", a: "分枝" },
+    { q: "ラグランジュ緩和では、制約をどこに移しますか？（漢字4文字）", a: "目的関数" },
+    { q: "局所探索法で、現在の解の近くの解の集合を何と呼びますか？（漢字2文字）", a: "近傍" },
+    { q: "メタヒューリスティクスの代表例を1つ挙げてください（カタカナ）", a: "タブー探索" },
+  ],
+  15: [
+    { q: "今日の授業は何ですか？（漢字2文字）", a: "演習" },
+    { q: "LP, IP, NLP のうち、最も効率よく解ける問題クラスは？（アルファベット2文字）", a: "LP" },
+    { q: "シンプレックス法は実行可能領域の何を辿るアルゴリズムですか？（漢字2文字）", a: "頂点" },
+    { q: "主問題の最適値と双対問題の最適値の関係は？（漢字2文字）", a: "等しい" },
+    { q: "この講義で扱った最適化手法のうち、連続変数のLP向けのものは？（カタカナ+法で7文字）", a: "シンプレックス法" },
+  ],
+};
+
+// ====================================================================
+// State
+// ====================================================================
+let state = {
+  lecture: null,
+  studentId: null,
+  question: null,
+  correctAnswer: null,
+  startTime: null,
+  timerId: null,
+  timeLeft: CONFIG.TIME_LIMIT,
+};
+
+// ====================================================================
+// 初期化
+// ====================================================================
+window.addEventListener("DOMContentLoaded", () => {
+  const params = new URLSearchParams(window.location.search);
+  const lec = params.get("lecture") || params.get("lec") || params.get("l");
+  if (lec) {
+    state.lecture = parseInt(lec, 10);
+    document.getElementById("lectureBadge").textContent = `第 ${state.lecture} 回`;
+  } else {
+    document.getElementById("lectureBadge").textContent = "講義回未指定";
+  }
+
+  // Enter キーで次へ
+  document.getElementById("studentId").addEventListener("keydown", e => {
+    if (e.key === "Enter") startQuestion();
+  });
+  document.getElementById("answerInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") submitAnswer();
+  });
+});
+
+// ====================================================================
+// Step 1 → Step 2: 問題生成
+// ====================================================================
+function startQuestion() {
+  const sid = document.getElementById("studentId").value.trim();
+  const errEl = document.getElementById("idError");
+
+  if (!sid) {
+    errEl.textContent = "学籍番号を入力してください";
+    errEl.style.display = "block";
+    return;
+  }
+  if (!/^[0-9A-Za-z]+$/.test(sid)) {
+    errEl.textContent = "半角英数字で入力してください";
+    errEl.style.display = "block";
+    return;
+  }
+  errEl.style.display = "none";
+
+  state.studentId = sid;
+
+  // 問題を選択（学籍番号＋講義回でハッシュ → 問題インデックス）
+  const bank = QUESTION_BANK[state.lecture] || QUESTION_BANK[1];
+  const hash = simpleHash(sid + "_" + state.lecture);
+  const idx = hash % bank.length;
+  const selected = bank[idx];
+
+  state.question = selected.q;
+  state.correctAnswer = selected.a;
+
+  document.getElementById("questionText").textContent = selected.q;
+  document.getElementById("sidDisplay").textContent = `学籍番号: ${sid}`;
+
+  showStep("step2");
+  document.getElementById("answerInput").focus();
+
+  // タイマー開始
+  state.startTime = Date.now();
+  state.timeLeft = CONFIG.TIME_LIMIT;
+  startTimer();
+}
+
+// ====================================================================
+// タイマー
+// ====================================================================
+function startTimer() {
+  updateTimerDisplay();
+  state.timerId = setInterval(() => {
+    const elapsed = (Date.now() - state.startTime) / 1000;
+    state.timeLeft = Math.max(0, CONFIG.TIME_LIMIT - elapsed);
+    updateTimerDisplay();
+
+    if (state.timeLeft <= 0) {
+      clearInterval(state.timerId);
+      showStep("stepExpired");
+      // 時間切れでも記録を送信（不正解として）
+      sendToGAS(false, CONFIG.TIME_LIMIT);
+    }
+  }, 500);
+}
+
+function updateTimerDisplay() {
+  const pct = (state.timeLeft / CONFIG.TIME_LIMIT) * 100;
+  const fill = document.getElementById("timerFill");
+  fill.style.width = pct + "%";
+  fill.className = "fill" +
+    (pct < 20 ? " critical" : pct < 40 ? " warn" : "");
+
+  document.getElementById("timerText").textContent =
+    `残り ${Math.ceil(state.timeLeft)} 秒`;
+}
+
+// ====================================================================
+// Step 2 → Step 3: 回答提出
+// ====================================================================
+function submitAnswer() {
+  clearInterval(state.timerId);
+  const answer = document.getElementById("answerInput").value.trim();
+  const errEl = document.getElementById("ansError");
+
+  if (!answer) {
+    errEl.textContent = "回答を入力してください";
+    errEl.style.display = "block";
+    startTimer(); // タイマー再開
+    return;
+  }
+  errEl.style.display = "none";
+
+  const elapsed = ((Date.now() - state.startTime) / 1000).toFixed(1);
+  const correct = checkAnswer(answer, state.correctAnswer);
+
+  // 結果表示
+  document.getElementById("resultIcon").textContent = correct ? "\u2705" : "\u274C";
+  document.getElementById("resultMsg").textContent =
+    correct ? "出席を記録しました" : "不正解ですが出席は記録しました";
+  document.getElementById("resultMsg").style.color =
+    correct ? "var(--success)" : "var(--gold)";
+  document.getElementById("resultDetail").innerHTML =
+    `学籍番号: ${state.studentId}<br>` +
+    `第${state.lecture}回 / 回答時間: ${elapsed}秒` +
+    (correct ? "" : `<br><small>正解: ${state.correctAnswer}</small>`);
+
+  showStep("step3");
+
+  // Google Sheets に送信
+  sendToGAS(correct, parseFloat(elapsed));
+}
+
+// ====================================================================
+// 回答チェック（柔軟な一致判定）
+// ====================================================================
+function checkAnswer(userAns, correctAns) {
+  const normalize = s => s
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[ー−\-]/g, "")
+    .replace(/０/g,"0").replace(/１/g,"1").replace(/２/g,"2")
+    .replace(/３/g,"3").replace(/４/g,"4").replace(/５/g,"5")
+    .replace(/６/g,"6").replace(/７/g,"7").replace(/８/g,"8")
+    .replace(/９/g,"9")
+    .replace(/[Ａ-Ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFF21 + 0x41))
+    .replace(/[ａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFF41 + 0x61));
+
+  return normalize(userAns) === normalize(correctAns);
+}
+
+// ====================================================================
+// Google Sheets 送信
+// ====================================================================
+function sendToGAS(correct, elapsedSec) {
+  if (!CONFIG.GAS_URL) {
+    console.log("GAS_URL未設定。ローカルログ:", {
+      lecture: state.lecture,
+      studentId: state.studentId,
+      question: state.question,
+      answer: document.getElementById("answerInput").value.trim(),
+      correct,
+      elapsedSec
+    });
+    return;
+  }
+
+  const payload = {
+    lecture: state.lecture,
+    studentId: state.studentId,
+    question: state.question,
+    answer: document.getElementById("answerInput").value.trim(),
+    correct,
+    elapsedSec
+  };
+
+  fetch(CONFIG.GAS_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }).catch(err => {
+    console.error("送信エラー:", err);
+  });
+}
+
+// ====================================================================
+// ユーティリティ
+// ====================================================================
+function showStep(id) {
+  document.querySelectorAll(".step").forEach(el => el.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    hash = ((hash << 5) - hash + c) | 0;
+  }
+  return Math.abs(hash);
+}
+</script>
+</body>
+</html>

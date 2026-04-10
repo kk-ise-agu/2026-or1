@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OR-I 出席管理 — 教員用</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --navy: #1A2744;
+    --accent: #4A90D9;
+    --gold: #E8B84B;
+    --light: #F5F7FA;
+    --danger: #E74C3C;
+    --success: #27AE60;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+    background: var(--light);
+    min-height: 100vh;
+    color: var(--navy);
+  }
+
+  /* ── ヘッダー ── */
+  .top-bar {
+    background: var(--navy);
+    color: #fff;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .top-bar h1 { font-size: 18px; font-weight: 700; }
+  .top-bar .status {
+    font-size: 13px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.15);
+  }
+  .top-bar .status.connected { background: var(--success); }
+
+  /* ── メインレイアウト ── */
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 24px;
+  }
+
+  @media (max-width: 800px) {
+    .container { grid-template-columns: 1fr; }
+  }
+
+  /* ── カード ── */
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    padding: 24px;
+  }
+  .card h2 {
+    font-size: 16px;
+    color: var(--navy);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--light);
+  }
+
+  /* ── 設定パネル ── */
+  .setting-group { margin-bottom: 16px; }
+  .setting-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 4px;
+  }
+  .setting-group input, .setting-group select {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .setting-group input:focus, .setting-group select:focus {
+    border-color: var(--accent);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 20px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+    width: 100%;
+  }
+  .btn:hover { background: #3A7BC8; }
+  .btn.gold { background: var(--gold); color: var(--navy); }
+  .btn.gold:hover { background: #D4A43C; }
+  .btn.danger { background: var(--danger); }
+  .btn.success { background: var(--success); }
+  .btn.outline {
+    background: transparent;
+    color: var(--accent);
+    border: 2px solid var(--accent);
+  }
+  .btn.outline:hover { background: var(--accent); color: #fff; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── QRコード ── */
+  .qr-area {
+    text-align: center;
+    margin: 20px 0;
+  }
+  #qrcode {
+    display: inline-block;
+    padding: 16px;
+    background: #fff;
+    border-radius: 12px;
+    border: 3px solid var(--navy);
+  }
+  #qrcode img { display: block; }
+  .qr-url {
+    font-size: 12px;
+    color: #888;
+    margin-top: 8px;
+    word-break: break-all;
+    line-height: 1.4;
+  }
+  .qr-lecture-label {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--navy);
+    margin-bottom: 8px;
+  }
+
+  /* ── フルスクリーンQR ── */
+  .fullscreen-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #fff;
+    z-index: 1000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .fullscreen-overlay.active { display: flex; }
+  .fullscreen-overlay .qr-lecture-label { font-size: 36px; margin-bottom: 16px; }
+  .fullscreen-overlay #qrcode-full { margin-bottom: 16px; }
+  .fullscreen-overlay .hint {
+    font-size: 14px;
+    color: #aaa;
+    margin-top: 12px;
+  }
+
+  /* ── 出席データテーブル ── */
+  .data-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .data-header h2 { margin-bottom: 0; border: none; padding-bottom: 0; }
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .badge.total { background: var(--accent); color: #fff; }
+  .badge.correct { background: var(--success); color: #fff; }
+  .badge.wrong { background: var(--danger); color: #fff; }
+
+  .table-wrap { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  th, td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+  }
+  th {
+    background: var(--light);
+    font-weight: 700;
+    color: #555;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+  }
+  tr:hover td { background: #FAFBFC; }
+  .correct-mark { color: var(--success); font-weight: 700; }
+  .wrong-mark { color: var(--danger); font-weight: 700; }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #aaa;
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+  /* ── 設定エリア ── */
+  .config-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 2px solid var(--light);
+  }
+  .config-section summary {
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .gas-url-input {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-family: monospace;
+    margin-top: 8px;
+  }
+  .gas-url-input:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+  .help-text {
+    font-size: 12px;
+    color: #999;
+    margin-top: 4px;
+    line-height: 1.5;
+  }
+
+  /* ── 自動更新インジケータ ── */
+  .refresh-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 12px;
+  }
+  .refresh-indicator .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ── 印刷用 ── */
+  @media print {
+    body { background: #fff; }
+    .top-bar, .card:not(.qr-card), .config-section { display: none; }
+    .container { display: block; padding: 0; }
+    .qr-area { margin-top: 40px; }
+    #qrcode { border-width: 4px; }
+    .qr-lecture-label { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── ヘッダー ── -->
+<div class="top-bar">
+  <h1>OR-I 出席管理システム</h1>
+  <div class="status" id="gasStatus">未接続</div>
+</div>
+
+<!-- ── メインコンテンツ ── -->
+<div class="container">
+
+  <!-- 左カラム: QR生成 -->
+  <div>
+    <div class="card qr-card">
+      <h2>QRコード生成</h2>
+
+      <div class="setting-group">
+        <label for="baseUrl">出席ページURL</label>
+        <input type="text" id="baseUrl" placeholder="https://your-name.github.io/or1/attendance/">
+        <div class="help-text">index.htmlをホストしているURL</div>
+      </div>
+
+      <div class="setting-group">
+        <label for="lectureNum">講義回</label>
+        <select id="lectureNum">
+          <option value="">-- 選択 --</option>
+          <option value="1">第1回 — 線形計画法の概要</option>
+          <option value="2">第2回 — LPの定式化</option>
+          <option value="3">第3回 — シンプレックス法</option>
+          <option value="4">第4回 — 双対理論</option>
+          <option value="5">第5回 — 感度分析</option>
+          <option value="6">第6回 — 輸送問題</option>
+          <option value="7">第7回 — 整数計画法</option>
+          <option value="8">第8回 — 中間まとめ</option>
+          <option value="9">第9回 — ネットワーク最適化</option>
+          <option value="10">第10回 — 最短路・最大流</option>
+          <option value="11">第11回 — 動的計画法</option>
+          <option value="12">第12回 — 非線形計画法</option>
+          <option value="13">第13回 — 在庫管理モデル</option>
+          <option value="14">第14回 — 待ち行列理論</option>
+          <option value="15">第15回 — 総まとめ</option>
+        </select>
+      </div>
+
+      <button class="btn gold" onclick="generateQR()">QRコードを生成</button>
+
+      <div class="qr-area" id="qrArea" style="display:none;">
+        <div class="qr-lecture-label" id="qrLabel"></div>
+        <div id="qrcode"></div>
+        <div class="qr-url" id="qrUrlText"></div>
+        <div style="margin-top: 12px; display: flex; gap: 8px;">
+          <button class="btn outline" onclick="showFullscreen()" style="flex:1;">
+            全画面表示
+          </button>
+          <button class="btn outline" onclick="printQR()" style="flex:1;">
+            印刷
+          </button>
+        </div>
+      </div>
+
+      <!-- GAS設定 -->
+      <details class="config-section">
+        <summary>Google Sheets 連携設定</summary>
+        <input type="text" class="gas-url-input" id="gasUrl"
+               placeholder="https://script.google.com/macros/s/.../exec"
+               oninput="saveGasUrl()">
+        <div class="help-text">
+          gas_backend.js をデプロイして得られるURLを入力してください。<br>
+          設定するとリアルタイムで出席データを取得できます。
+        </div>
+        <button class="btn" style="margin-top:12px;" onclick="testGasConnection()">
+          接続テスト
+        </button>
+      </details>
+    </div>
+  </div>
+
+  <!-- 右カラム: 出席データ -->
+  <div>
+    <div class="card">
+      <div class="data-header">
+        <h2 id="dataTitle">出席データ</h2>
+        <div>
+          <span class="badge total" id="badgeTotal" style="display:none;">0名</span>
+          <span class="badge correct" id="badgeCorrect" style="display:none;">正解 0</span>
+          <span class="badge wrong" id="badgeWrong" style="display:none;">不正解 0</span>
+        </div>
+      </div>
+
+      <div id="dataArea">
+        <div class="empty-state">
+          <div class="icon">📋</div>
+          <div>GAS URLを設定し、講義回を選択すると<br>出席データが表示されます</div>
+        </div>
+      </div>
+
+      <div class="refresh-indicator" id="refreshIndicator" style="display:none;">
+        <div class="dot"></div>
+        <span>15秒ごとに自動更新中</span>
+      </div>
+    </div>
+
+    <!-- 全回サマリー -->
+    <div class="card" style="margin-top: 20px;">
+      <h2>全回サマリー</h2>
+      <div id="summaryArea">
+        <div class="empty-state">
+          <div class="icon">📊</div>
+          <div>GAS接続後に表示されます</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── フルスクリーンQR ── -->
+<div class="fullscreen-overlay" id="fullscreenOverlay" onclick="hideFullscreen()">
+  <div class="qr-lecture-label" id="qrLabelFull"></div>
+  <div id="qrcode-full"></div>
+  <div class="hint">クリックで閉じる / Escキーで戻る</div>
+</div>
+
+<script>
+// ── 状態管理 ──
+let currentQRInstance = null;
+let currentQRFullInstance = null;
+let refreshInterval = null;
+let currentLecture = null;
+
+// ── 初期化 ──
+document.addEventListener('DOMContentLoaded', () => {
+  // LocalStorageから設定復元
+  const savedUrl = localStorage.getItem('or1_base_url');
+  const savedGas = localStorage.getItem('or1_gas_url');
+  if (savedUrl) document.getElementById('baseUrl').value = savedUrl;
+  if (savedGas) {
+    document.getElementById('gasUrl').value = savedGas;
+    testGasConnection();
+  }
+
+  // Escキーでフルスクリーン解除
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hideFullscreen();
+  });
+});
+
+// ── QRコード生成 ──
+function generateQR() {
+  const baseUrl = document.getElementById('baseUrl').value.trim();
+  const lecture = document.getElementById('lectureNum').value;
+
+  if (!baseUrl) {
+    alert('出席ページURLを入力してください');
+    return;
+  }
+  if (!lecture) {
+    alert('講義回を選択してください');
+    return;
+  }
+
+  // URLを保存
+  localStorage.setItem('or1_base_url', baseUrl);
+
+  // URL組み立て
+  const separator = baseUrl.includes('?') ? '&' : '?';
+  const targetUrl = baseUrl.endsWith('/')
+    ? `${baseUrl}index.html${separator}lecture=${lecture}`
+    : baseUrl.endsWith('.html')
+      ? `${baseUrl}${separator}lecture=${lecture}`
+      : `${baseUrl}/index.html${separator}lecture=${lecture}`;
+
+  currentLecture = lecture;
+
+  // QRコード表示エリア
+  const qrArea = document.getElementById('qrArea');
+  qrArea.style.display = 'block';
+
+  // ラベル
+  const select = document.getElementById('lectureNum');
+  const label = select.options[select.selectedIndex].text;
+  document.getElementById('qrLabel').textContent = label;
+  document.getElementById('qrUrlText').textContent = targetUrl;
+
+  // QRコード生成（既存を消去）
+  const qrEl = document.getElementById('qrcode');
+  qrEl.innerHTML = '';
+  currentQRInstance = new QRCode(qrEl, {
+    text: targetUrl,
+    width: 240,
+    height: 240,
+    colorDark: '#1A2744',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  // データ取得開始
+  fetchAttendanceData();
+  startAutoRefresh();
+}
+
+// ── フルスクリーン表示 ──
+function showFullscreen() {
+  const overlay = document.getElementById('fullscreenOverlay');
+  overlay.classList.add('active');
+
+  const select = document.getElementById('lectureNum');
+  const label = select.options[select.selectedIndex].text;
+  document.getElementById('qrLabelFull').textContent = label;
+
+  const qrFullEl = document.getElementById('qrcode-full');
+  qrFullEl.innerHTML = '';
+  const targetUrl = document.getElementById('qrUrlText').textContent;
+  currentQRFullInstance = new QRCode(qrFullEl, {
+    text: targetUrl,
+    width: 400,
+    height: 400,
+    colorDark: '#1A2744',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+}
+
+function hideFullscreen() {
+  document.getElementById('fullscreenOverlay').classList.remove('active');
+}
+
+function printQR() {
+  window.print();
+}
+
+// ── GAS連携 ──
+function saveGasUrl() {
+  const url = document.getElementById('gasUrl').value.trim();
+  localStorage.setItem('or1_gas_url', url);
+}
+
+function getGasUrl() {
+  return document.getElementById('gasUrl').value.trim();
+}
+
+async function testGasConnection() {
+  const url = getGasUrl();
+  if (!url) {
+    updateStatus('未接続', false);
+    return;
+  }
+
+  updateStatus('接続中…', false);
+
+  try {
+    const res = await fetch(`${url}?action=status`);
+    const data = await res.json();
+    if (data.success) {
+      updateStatus(`接続済: ${data.spreadsheet}`, true);
+      fetchSummary();
+    } else {
+      updateStatus('接続エラー', false);
+    }
+  } catch (err) {
+    updateStatus('接続失敗', false);
+    console.error('GAS接続エラー:', err);
+  }
+}
+
+function updateStatus(text, connected) {
+  const el = document.getElementById('gasStatus');
+  el.textContent = text;
+  el.className = 'status' + (connected ? ' connected' : '');
+}
+
+// ── 出席データ取得 ──
+async function fetchAttendanceData() {
+  const url = getGasUrl();
+  if (!url || !currentLecture) return;
+
+  try {
+    const res = await fetch(`${url}?action=data&lecture=${currentLecture}`);
+    const result = await res.json();
+
+    if (result.success) {
+      renderAttendanceTable(result.data);
+    }
+  } catch (err) {
+    console.error('データ取得エラー:', err);
+  }
+}
+
+function renderAttendanceTable(data) {
+  const area = document.getElementById('dataArea');
+  const select = document.getElementById('lectureNum');
+  const label = select.options[select.selectedIndex].text;
+  document.getElementById('dataTitle').textContent = `出席データ — ${label}`;
+
+  if (!data || data.length === 0) {
+    area.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">🕐</div>
+        <div>まだ回答がありません<br>QRコードを表示して学生の回答を待ってください</div>
+      </div>`;
+    updateBadges(0, 0, 0);
+    return;
+  }
+
+  // 集計
+  const total = data.length;
+  const correct = data.filter(d => d.correct === '○').length;
+  const wrong = total - correct;
+  updateBadges(total, correct, wrong);
+
+  // テーブル生成
+  let html = `<div class="table-wrap"><table>
+    <thead><tr>
+      <th>#</th><th>学籍番号</th><th>回答</th><th>正誤</th><th>経過秒</th><th>時刻</th>
+    </tr></thead><tbody>`;
+
+  data.forEach((row, i) => {
+    const time = row.timestamp ? new Date(row.timestamp).toLocaleTimeString('ja-JP') : '-';
+    const mark = row.correct === '○'
+      ? '<span class="correct-mark">○</span>'
+      : '<span class="wrong-mark">×</span>';
+    html += `<tr>
+      <td>${i + 1}</td>
+      <td>${escapeHtml(String(row.studentId))}</td>
+      <td>${escapeHtml(String(row.answer))}</td>
+      <td>${mark}</td>
+      <td>${row.elapsedSec ?? '-'}s</td>
+      <td>${time}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  area.innerHTML = html;
+}
+
+function updateBadges(total, correct, wrong) {
+  const bTotal = document.getElementById('badgeTotal');
+  const bCorrect = document.getElementById('badgeCorrect');
+  const bWrong = document.getElementById('badgeWrong');
+
+  bTotal.textContent = `${total}名`;
+  bCorrect.textContent = `正解 ${correct}`;
+  bWrong.textContent = `不正解 ${wrong}`;
+
+  bTotal.style.display = total > 0 ? 'inline-block' : 'none';
+  bCorrect.style.display = total > 0 ? 'inline-block' : 'none';
+  bWrong.style.display = total > 0 ? 'inline-block' : 'none';
+}
+
+// ── 全回サマリー ──
+async function fetchSummary() {
+  const url = getGasUrl();
+  if (!url) return;
+
+  try {
+    const res = await fetch(`${url}?action=summary`);
+    const result = await res.json();
+
+    if (result.success) {
+      renderSummary(result.summary);
+    }
+  } catch (err) {
+    console.error('サマリー取得エラー:', err);
+  }
+}
+
+function renderSummary(summary) {
+  const area = document.getElementById('summaryArea');
+
+  const keys = Object.keys(summary).sort((a, b) => parseInt(a) - parseInt(b));
+  if (keys.length === 0) {
+    area.innerHTML = `<div class="empty-state">
+      <div class="icon">📊</div><div>まだデータがありません</div>
+    </div>`;
+    return;
+  }
+
+  let html = `<div class="table-wrap"><table>
+    <thead><tr><th>講義回</th><th>出席数</th><th>正解数</th><th>正答率</th></tr></thead><tbody>`;
+
+  keys.forEach(lec => {
+    const s = summary[lec];
+    const rate = s.total > 0 ? Math.round(s.correct / s.total * 100) : 0;
+    const barColor = rate >= 70 ? 'var(--success)' : rate >= 40 ? 'var(--gold)' : 'var(--danger)';
+    html += `<tr>
+      <td>第${lec}回</td>
+      <td>${s.total}</td>
+      <td>${s.correct}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="flex:1;height:6px;background:#eee;border-radius:3px;overflow:hidden;">
+            <div style="width:${rate}%;height:100%;background:${barColor};border-radius:3px;"></div>
+          </div>
+          <span style="font-size:13px;font-weight:700;min-width:40px;text-align:right;">${rate}%</span>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  area.innerHTML = html;
+}
+
+// ── 自動更新 ──
+function startAutoRefresh() {
+  if (refreshInterval) clearInterval(refreshInterval);
+  document.getElementById('refreshIndicator').style.display = 'flex';
+  refreshInterval = setInterval(() => {
+    fetchAttendanceData();
+  }, 15000); // 15秒
+}
+
+// ── ユーティリティ ──
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>
