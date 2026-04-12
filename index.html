@@ -232,6 +232,13 @@
     <div class="result-detail">制限時間内に回答できませんでした。<br>教員に申し出てください。</div>
   </div>
 
+  <!-- URL 期限切れ -->
+  <div class="step" id="stepUrlExpired">
+    <div class="result-icon">&#x23F0;</div>
+    <div class="result-msg" style="color:var(--danger)">期限切れです</div>
+    <div class="result-detail">このQRコードの有効期限が切れています。<br>教員が提示する新しいQRコードからアクセスしてください。</div>
+  </div>
+
   <!-- コード不正 -->
   <div class="step" id="stepInvalidCode">
     <div class="result-icon">&#x1F6AB;</div>
@@ -512,6 +519,7 @@ let state = {
   lecture: null,
   round: null,      // ラウンド（1 or 2）
   code: null,       // ワンタイムコード（URLパラメータから取得）
+  urlExp: null,     // QRの有効期限（Unix ms）
   deviceId: null,   // 端末識別子
   studentId: null,
   question: null,
@@ -567,6 +575,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const lec = params.get("lecture") || params.get("lec") || params.get("l");
   const round = params.get("round") || params.get("r") || "1";
   const code = params.get("code");
+  const exp = params.get("exp") || params.get("expires") || params.get("expiresAt");
 
   if (lec) {
     state.lecture = parseInt(lec, 10);
@@ -586,6 +595,15 @@ window.addEventListener("DOMContentLoaded", () => {
   }
   state.code = code;
   state.deviceId = generateDeviceId();
+
+  if (exp && /^\d+$/.test(exp)) {
+    state.urlExp = parseInt(exp, 10);
+    if (!isNaN(state.urlExp) && Date.now() > state.urlExp) {
+      showStep("stepUrlExpired");
+      document.getElementById("btnStart").disabled = true;
+      return;
+    }
+  }
 
   // 同一端末での重複回答チェック
   if (hasAlreadyAnswered()) {
@@ -607,6 +625,11 @@ window.addEventListener("DOMContentLoaded", () => {
 // Step 1 → Step 2: 問題生成
 // ====================================================================
 function startQuestion() {
+  if (state.urlExp && Date.now() > state.urlExp) {
+    showStep("stepUrlExpired");
+    document.getElementById("btnStart").disabled = true;
+    return;
+  }
   const sid = document.getElementById("studentId").value.trim();
   const errEl = document.getElementById("idError");
 
@@ -681,6 +704,10 @@ function updateTimerDisplay() {
 // Step 2 → Step 3: 回答提出
 // ====================================================================
 function submitAnswer() {
+  if (state.urlExp && Date.now() > state.urlExp) {
+    showStep("stepUrlExpired");
+    return;
+  }
   clearInterval(state.timerId);
   const answer = document.getElementById("answerInput").value.trim();
   const errEl = document.getElementById("ansError");
